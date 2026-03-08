@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Location Map Viewer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+body{margin:0;font-family:Arial;}
+#map{height:60vh;}
+#timeline{height:40vh;overflow-y:auto;padding:10px;}
+.item{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;}
+</style>
+</head>
+
+<body>
+
+<div id="map"></div>
+<div id="timeline"></div>
+
+<script>
+
+let map=L.map('map').setView([54,-106],5)
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{maxZoom:19}
+).addTo(map)
+
+let points=[]
+
+fetch("location-history.json")
+.then(r=>r.json())
+.then(data=>{
+
+data.forEach(item=>{
+
+if(item.visit){
+
+let p=item.visit.topCandidate.placeLocation.replace("geo:","").split(",")
+
+points.push({
+lat:parseFloat(p[0]),
+lon:parseFloat(p[1]),
+time:item.startTime,
+type:"Stop"
+})
+
+}
+
+if(item.activity){
+
+let s=item.activity.start.replace("geo:","").split(",")
+
+points.push({
+lat:parseFloat(s[0]),
+lon:parseFloat(s[1]),
+time:item.startTime,
+type:"Movement"
+})
+
+}
+
+})
+
+points.sort((a,b)=>new Date(a.time)-new Date(b.time))
+
+buildTimeline()
+
+})
+
+function buildTimeline(){
+
+let t=document.getElementById("timeline")
+
+points.forEach(p=>{
+
+let d=new Date(p.time)
+
+let div=document.createElement("div")
+div.className="item"
+
+div.innerHTML=
+d.toLocaleDateString()+" "+
+d.toLocaleTimeString()+"<br>"+p.type
+
+div.onclick=()=>{
+map.panTo([p.lat,p.lon])
+L.marker([p.lat,p.lon]).addTo(map)
+}
+
+t.appendChild(div)
+
+})
+
+}
+
+</script>
+
+</body>
+</html>

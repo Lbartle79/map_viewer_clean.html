@@ -2,14 +2,42 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Location Map Viewer</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<title>GPS Playback</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
 <style>
-body{margin:0;font-family:Arial;}
-#map{height:60vh;}
-#timeline{height:40vh;overflow-y:auto;padding:10px;}
-.item{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;}
+body{
+margin:0;
+font-family:Arial;
+background:#000;
+color:#fff;
+}
+
+#map{
+height:50vh;
+}
+
+#timeline{
+height:50vh;
+overflow:auto;
+padding:10px;
+}
+
+.day{
+color:#7cc7ff;
+margin-top:20px;
+font-weight:bold;
+}
+
+.entry{
+padding:4px;
+cursor:pointer;
+}
+
+.entry:hover{
+background:#222;
+}
 </style>
 </head>
 
@@ -18,82 +46,222 @@ body{margin:0;font-family:Arial;}
 <div id="map"></div>
 <div id="timeline"></div>
 
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
 <script>
 
-let map=L.map('map').setView([54,-106],5)
+let map = L.map('map').setView([53,-105],5)
 
 L.tileLayer(
 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
 {maxZoom:19}
 ).addTo(map)
 
-let points=[]
+let markers=[]
+let dots=[]
+let routeLine=null
+let allPoints=[]
+
+function clearMap(){
+
+markers.forEach(m=>map.removeLayer(m))
+dots.forEach(d=>map.removeLayer(d))
+
+markers=[]
+dots=[]
+
+if(routeLine) map.removeLayer(routeLine)
+
+}
+
+function formatTime(t){
+
+return new Date(t).toLocaleTimeString(
+"en-CA",
+{
+timeZone:"America/Regina",
+hour:"numeric",
+minute:"2-digit",
+hour12:true
+})
+
+}
+
+function addPoint(time,lat,lon,type){
+
+let d=new Date(time)
+let day=d.toISOString().split("T")[0]
+
+let p={
+time:d,
+lat:parseFloat(lat),
+lon:parseFloat(lon),
+type:type,
+date:day
+}
+
+allPoints.push(p)
+
+}
+
+function addMarker(p){
+
+let m=L.marker([p.lat,p.lon]).addTo(map)
+
+m.bindPopup(
+formatTime(p.time)+
+"<br>"+p.lat+","+p.lon
+)
+
+markers.push(m)
+
+}
+
+function addDot(p){
+
+let d=L.circleMarker(
+[p.lat,p.lon],
+{
+radius:3,
+color:"#00ffff"
+}
+).addTo(map)
+
+dots.push(d)
+
+}
+
+function showDay(day){
+
+clearMap()
+
+let pts=allPoints.filter(p=>p.date===day)
+
+pts.sort((a,b)=>a.time-b.time)
+
+let route=[]
+
+pts.forEach(p=>{
+
+route.push([p.lat,p.lon])
+
+if(p.type==="breadcrumb"){
+
+addDot(p)
+
+}else{
+
+addMarker(p)
+
+}
+
+})
+
+if(route.length>1){
+
+routeLine=L.polyline(route,{color:"blue"}).addTo(map)
+
+map.fitBounds(routeLine.getBounds())
+
+}
+
+}
+
+function buildTimeline(){
+
+let timeline=document.getElementById("timeline")
+
+let days={}
+
+allPoints.forEach(p=>{
+
+if(!days[p.date]) days[p.date]=[]
+
+days[p.date].push(p)
+
+})
+
+Object.keys(days).sort().forEach(day=>{
+
+let h=document.createElement("div")
+h.className="day"
+h.textContent=day
+
+h.onclick=()=>showDay(day)
+
+timeline.appendChild(h)
+
+days[day].sort((a,b)=>a.time-b.time)
+
+days[day].forEach(p=>{
+
+let e=document.createElement("div")
+e.className="entry"
+
+e.textContent=
+formatTime(p.time)+
+" — "+p.type
+
+e.onclick=()=>{
+
+map.setView([p.lat,p.lon],14)
+
+}
+
+timeline.appendChild(e)
+
+})
+
+})
+
+}
 
 fetch("location-history.json")
+
 .then(r=>r.json())
+
 .then(data=>{
 
 data.forEach(item=>{
 
-if(item.visit){
-
-let p=item.visit.topCandidate.placeLocation.replace("geo:","").split(",")
-
-points.push({
-lat:parseFloat(p[0]),
-lon:parseFloat(p[1]),
-time:item.startTime,
-type:"Stop"
-})
-
-}
-
 if(item.activity){
 
 let s=item.activity.start.replace("geo:","").split(",")
+let e=item.activity.end.replace("geo:","").split(",")
 
-points.push({
-lat:parseFloat(s[0]),
-lon:parseFloat(s[1]),
-time:item.startTime,
-type:"Movement"
+addPoint(item.startTime,s[0],s[1],"movement")
+
+addPoint(item.endTime,e[0],e[1],"movement")
+
+}
+
+if(item.visit){
+
+let c=item.visit.topCandidate.placeLocation
+.replace("geo:","")
+.split(",")
+
+addPoint(item.startTime,c[0],c[1],"visit")
+
+}
+
+if(item.timelinePath){
+
+item.timelinePath.forEach(p=>{
+
+let c=p.point.replace("geo:","").split(",")
+
+addPoint(item.startTime,c[0],c[1],"breadcrumb")
+
 })
 
 }
 
 })
-
-points.sort((a,b)=>new Date(a.time)-new Date(b.time))
 
 buildTimeline()
 
 })
-
-function buildTimeline(){
-
-let t=document.getElementById("timeline")
-
-points.forEach(p=>{
-
-let d=new Date(p.time)
-
-let div=document.createElement("div")
-div.className="item"
-
-div.innerHTML=
-d.toLocaleDateString()+" "+
-d.toLocaleTimeString()+"<br>"+p.type
-
-div.onclick=()=>{
-map.panTo([p.lat,p.lon])
-L.marker([p.lat,p.lon]).addTo(map)
-}
-
-t.appendChild(div)
-
-})
-
-}
 
 </script>
 

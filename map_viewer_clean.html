@@ -217,9 +217,7 @@ timeline.appendChild(e)
 }
 
 fetch("location-history.json")
-
 .then(r=>r.json())
-
 .then(data=>{
 
 data.forEach(item=>{
@@ -230,10 +228,37 @@ let s=item.activity.start.replace("geo:","").split(",")
 let e=item.activity.end.replace("geo:","").split(",")
 
 addPoint(item.startTime,s[0],s[1],"movement")
-
 addPoint(item.endTime,e[0],e[1],"movement")
 
 }
+
+if(item.visit){
+
+let c=item.visit.topCandidate.placeLocation
+.replace("geo:","")
+.split(",")
+
+addPoint(item.startTime,c[0],c[1],"visit")
+
+}
+
+if(item.timelinePath){
+
+item.timelinePath.forEach(p=>{
+
+let c=p.point.replace("geo:","").split(",")
+
+addPoint(item.startTime,c[0],c[1],"breadcrumb")
+
+})
+
+}
+
+})
+
+buildTimeline()
+
+})
 
 if(item.visit){
 
